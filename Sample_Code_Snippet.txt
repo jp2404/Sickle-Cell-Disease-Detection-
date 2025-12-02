@@ -1,0 +1,86 @@
+import cv2
+import numpy as np
+import os
+from sklearn.preprocessing import MinMaxScaler
+
+# Directory paths for training and test images
+train_dir = "path/to/train_directory"
+test_dir = "path/to/test_directory"
+
+# Parameters
+train_top_n = 350  # Number of top images per class for training
+test_top_n = 100   # Number of top images per class for testing
+weight_brightness = 0.5  # Weight for brightness in the final score
+weight_zoom = 0.5        # Weight for zoom level in the final score
+
+# Function to calculate brightness (V channel in HSV)
+def calculate_brightness(image):
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    return hsv[..., 2].mean()
+
+# Function to estimate zoom level based on largest contour area
+def calculate_zoom_level(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, binary = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        largest_contour = max(contours, key=cv2.contourArea)
+        return cv2.contourArea(largest_contour)
+    return 0
+
+# Function to process images in a directory
+def process_images(directory, top_n):
+    image_scores = []
+
+    for class_name in os.listdir(directory):
+        class_dir = os.path.join(directory, class_name)
+        if not os.path.isdir(class_dir):
+            continue
+
+        for img_name in os.listdir(class_dir):
+            img_path = os.path.join(class_dir, img_name)
+            image = cv2.imread(img_path)
+            if image is None:
+                continue
+
+            # Calculate brightness and zoom level
+            brightness = calculate_brightness(image)
+            zoom_level = calculate_zoom_level(image)
+
+            # Append scores with image path
+            image_scores.append({
+                "class": class_name,
+                "image_path": img_path,
+                "brightness": brightness,
+                "zoom_level": zoom_level
+            })
+
+        # Normalize brightness and zoom scores between 0 and 1
+        brightness_scores = np.array([item["brightness"] for item in image_scores]).reshape(-1, 1)
+        zoom_scores = np.array([item["zoom_level"] for item in image_scores]).reshape(-1, 1)
+        
+        scaler = MinMaxScaler()
+        brightness_normalized = scaler.fit_transform(brightness_scores).flatten()
+        zoom_normalized = scaler.fit_transform(zoom_scores).flatten()
+        
+        for i, item in enumerate(image_scores):
+            item["brightness_norm"] = brightness_normalized[i]
+            item["zoom_norm"] = zoom_normalized[i]
+            item["combined_score"] = (weight_brightness * item["brightness_norm"] + 
+                                      weight_zoom * item["zoom_norm"])
+
+        # Sort by combined score and select top images
+        top_images = sorted(image_scores, key=lambda x: x["combined_score"], reverse=True)[:top_n]
+
+        # Save or process the selected images further if needed
+        print(f"Top {top_n} images for class '{class_name}' in {directory}:")
+        for img in top_images:
+            print(img["image_path"])
+
+        # Reset image scores for the next class
+        image_scores = []
+
+# Process train and test directories
+process_images(train_dir, train_top_n)
+process_images(test_dir, test_top_n)
