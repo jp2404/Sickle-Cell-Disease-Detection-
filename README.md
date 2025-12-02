@@ -10,4 +10,4 @@ Combined Scoring for Selection: Normalizes brightness and zoom scores, combining
 
 Customizable Dataset Reduction: Allows selection of a specific number of top images per class, tailored to support training and testing requirements.
 
-We have also attested a sample of ResNet50 Model trained on triplet loss with XAI results for your reference.
+We have also attested a sample of ResNet50 Model trained on triplet loss with XAI results for your reference. Other codes will be updated shortly.
